@@ -20,14 +20,19 @@ import singleTypePointsEdge.SinglePointsTraversal;
 
 public class Queries {
 
-	private static final String QUERIES_PATH = "queriesReach";
+	private static GraphDatabaseService graphDb;
+	public static String[] intervals;
+
 	private static final String NEO4J_PATH = "/experiments/neo4j-community-3.1.1/";
 	private static final File DB_PATH = new File(NEO4J_PATH + "data/databases/dblp_multi.db");
-	private static GraphDatabaseService graphDb;
-	private static Label nodeLabel = Label.label("Author");
+	private static final Label nodeLabel = Label.label("Author");
+	public static final Label timeNodeLabel = Label.label("TimeInstance");
+	public static final String timeNodeProperty = "timeInstance";
+
+	private static final String QUERIES_PATH = "queriesReach";
+	public static final boolean TIME_INDEX_ENABLED = true;
 	public static final boolean simplePath = false;
 	private static int traversalType = 2;
-	public static String[] intervals;
 
 	public static void main(String[] args) throws NumberFormatException, IOException {
 		graphDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(DB_PATH)
@@ -44,6 +49,7 @@ public class Queries {
 		FileWriter writer = new FileWriter(queriesPath + "_result");
 		String line = null, resultPath = null;
 		String[] token = null, interval = null;
+		Node src = null, trg = null;
 		long tStart;
 		boolean result = false;
 		int c = 0;
@@ -71,12 +77,15 @@ public class Queries {
 				// query type
 				int type = Integer.parseInt(token[0]);
 
-				intervals = token[3].split(";");
+				if (type < 7) {
+					intervals = token[3].split(";");
+					src = graphDb.findNode(nodeLabel, "id", token[1]);
+					trg = graphDb.findNode(nodeLabel, "id", token[2]);
+				} else
+					intervals = token[1].split(";");
 
 				tStart = System.currentTimeMillis();
 
-				Node src = graphDb.findNode(nodeLabel, "id", token[1]);
-				Node trg = graphDb.findNode(nodeLabel, "id", token[2]);
 				Set<Integer> times = new HashSet<>();
 
 				for (String inter : intervals) {
@@ -88,7 +97,7 @@ public class Queries {
 				}
 
 				if (type == 1)
-					result = algo.conjuctiveReachability(src, trg, times);
+					result = algo.conjunctiveReachability(src, trg, times);
 				else if (type == 2)
 					result = algo.disjunctiveReachability(src, trg, times);
 				else if (type == 3)
@@ -100,19 +109,13 @@ public class Queries {
 				else if (type == 6)
 					resultPath = algo.atLeastPath(src, trg, times, Integer.parseInt(token[4]));
 				else if (type == 7)
-					result = algo.conjuctiveReachability(times);
+					resultPath = algo.conjunctiveReachability(times);
 				else if (type == 8)
-					result = algo.disjunctiveReachability(times);
+					resultPath = algo.disjunctiveReachability(times);
 				else if (type == 9)
-					result = algo.atLeastReachability(times, Integer.parseInt(token[4]));
-				else if (type == 10)
-					resultPath = algo.conjunctivePath(times);
-				else if (type == 11)
-					resultPath = algo.disjunctivePath(times);
-				else if (type == 12)
-					resultPath = algo.atLeastPath(times, Integer.parseInt(token[4]));
+					resultPath = algo.atLeastReachability(times, Integer.parseInt(token[2]));
 
-				if (type < 4 || (type < 10 && type > 6))
+				if (type < 4)
 					writer.write(result + "\t" + (System.currentTimeMillis() - tStart) + "\n");
 				else
 					writer.write(resultPath + "\t" + (System.currentTimeMillis() - tStart) + "\n");
