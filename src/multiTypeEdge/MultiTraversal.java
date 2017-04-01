@@ -21,6 +21,8 @@ import org.neo4j.graphdb.traversal.Evaluator;
 import org.neo4j.graphdb.traversal.Paths;
 import org.neo4j.graphdb.traversal.Uniqueness;
 
+import com.google.common.collect.HashBasedTable;
+
 import system.Queries;
 import system.GraphDbTraversal;
 
@@ -50,13 +52,13 @@ public class MultiTraversal extends GraphDbTraversal {
 	protected String pathTraversalAtLeast(Node src, Node trg, List<Integer> times, int k) {
 
 		String path = "";
-		Map<String, BitSet> inter = new HashMap<>();
 		BitSet interval = new BitSet();
+		HashBasedTable<Integer, Integer, BitSet> inter = HashBasedTable.create(100000, 100);
 
 		for (int t : times)
 			interval.set(t);
 
-		for (Path p : graphdb.traversalDescription().breadthFirst().uniqueness(Uniqueness.NODE_PATH)
+		for (Path p : graphdb.traversalDescription().breadthFirst().uniqueness(Uniqueness.RELATIONSHIP_GLOBAL)
 				.evaluator(new Evaluator() {
 
 					@Override
@@ -72,18 +74,21 @@ public class MultiTraversal extends GraphDbTraversal {
 						Node v = path.lastRelationship().getEndNode();
 						Node tmp;
 						BitSet edge_lifespan;
-
-						if (u.getId() > v.getId()) {
-							tmp = u;
-							u = v;
-							v = tmp;
+						
+						int u_id = Integer.parseInt("" + u.getProperty("id"));
+						int v_id = Integer.parseInt("" + v.getProperty("id"));
+						int tmp_;
+						
+						if (u_id > v_id) {
+							tmp_ = u_id;
+							u_id = v_id;
+							v_id = tmp_;
 						}
 
-						String key = u.getId() + "_" + v.getId();
 
-						if ((edge_lifespan = inter.get(key)) == null) {
+						if ((edge_lifespan = inter.get(u_id, v_id)) == null) {
 							edge_lifespan = new BitSet();
-							inter.put(key, edge_lifespan);
+							inter.put(u_id, v_id, edge_lifespan);
 
 							if (u.getDegree() > v.getDegree()) {
 								tmp = u;
@@ -116,20 +121,23 @@ public class MultiTraversal extends GraphDbTraversal {
 						} else if (path.endNode().equals(trg)) {
 							return Evaluation.INCLUDE_AND_PRUNE;
 						}
+						
+						if (path.lastRelationship().getEndNode().equals(src))
+							return Evaluation.EXCLUDE_AND_PRUNE;
+
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
 					}
 
-				}).traverse(src)) {
+				}).traverse(src)) {				
 
 			if (p.endNode().equals(trg)) {
 				BitSet I = (BitSet) interval.clone();
-				String key;
 
 				for (Relationship rel_ : p.relationships()) {
-					long u_id = rel_.getStartNode().getId();
-					long v_id = rel_.getEndNode().getId();
-					long tmp;
+					int u_id = Integer.parseInt("" + rel_.getStartNode().getProperty("id"));
+					int v_id = Integer.parseInt("" + rel_.getEndNode().getProperty("id"));
+					int tmp;
 
 					if (u_id > v_id) {
 						tmp = u_id;
@@ -137,8 +145,7 @@ public class MultiTraversal extends GraphDbTraversal {
 						v_id = tmp;
 					}
 
-					key = u_id + "_" + v_id;
-					I.and(inter.get(key));
+					I.and(inter.get(u_id, v_id));
 
 					if (I.cardinality() < k)
 						break;
@@ -191,11 +198,10 @@ public class MultiTraversal extends GraphDbTraversal {
 	protected String pathTraversalConj(Node src, Node trg, List<Integer> times) {
 
 		String path = "";
-		Map<String, Boolean> prune = new HashMap<>();
 
 		for (Path p : graphdb.traversalDescription().breadthFirst()
-				.relationships(relationships.get(times.get(0)), Direction.BOTH).uniqueness(Uniqueness.NODE_PATH)
-				.evaluator(new Evaluator() {
+				.relationships(relationships.get(times.get(0)), Direction.BOTH)
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -206,48 +212,31 @@ public class MultiTraversal extends GraphDbTraversal {
 						Node u = path.lastRelationship().getStartNode();
 						Node v = path.lastRelationship().getEndNode();
 						Node tmp;
-						Boolean isPruned;
 
-						if (u.getId() > v.getId()) {
+						if (u.getDegree() > v.getDegree()) {
 							tmp = u;
 							u = v;
 							v = tmp;
 						}
 
-						String key = u.getId() + "_" + v.getId();
+						boolean found = false;
 
-						if ((isPruned = prune.get(key)) == null) {
+						for (int i = 1; i < times.size(); i++) {
+							found = false;
 
-							if (u.getDegree() > v.getDegree()) {
-								tmp = u;
-								u = v;
-								v = tmp;
-							}
+							Iterable<Relationship> rels = u.getRelationships(Direction.BOTH,
+									relationships.get(times.get(i)));
 
-							boolean found = false;
-
-							for (int i = 1; i < times.size(); i++) {
-								found = false;
-
-								Iterable<Relationship> rels = u.getRelationships(Direction.BOTH,
-										relationships.get(times.get(i)));
-
-								for (Relationship r : rels) {
-									if (r.getOtherNode(u).equals(v)) {
-										found = true;
-										break;
-									}
-								}
-
-								if (!found) {
-									prune.put(key, true);
-									return Evaluation.EXCLUDE_AND_PRUNE;
+							for (Relationship r : rels) {
+								if (r.getOtherNode(u).equals(v)) {
+									found = true;
+									break;
 								}
 							}
 
-							prune.put(key, false);
-						} else if (isPruned) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
+							if (!found)
+								return Evaluation.EXCLUDE_AND_PRUNE;
+
 						}
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
@@ -268,14 +257,13 @@ public class MultiTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<Node> reachabilityBFSConj(Node src, List<Integer> times) {
+	protected List<Node> reachabilityGlobalBFSConj(Node src, List<Integer> times) {
 
 		Set<Node> nodes = new HashSet<>();
-		Map<String, Boolean> prune = new HashMap<>();
 
 		for (Path p : graphdb.traversalDescription().breadthFirst()
-				.relationships(relationships.get(times.get(0)), Direction.BOTH).uniqueness(Uniqueness.NODE_PATH)
-				.evaluator(new Evaluator() {
+				.relationships(relationships.get(times.get(0)), Direction.BOTH)
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -286,48 +274,31 @@ public class MultiTraversal extends GraphDbTraversal {
 						Node u = path.lastRelationship().getStartNode();
 						Node v = path.lastRelationship().getEndNode();
 						Node tmp;
-						Boolean isPruned;
 
-						if (u.getId() > v.getId()) {
+						if (u.getDegree() > v.getDegree()) {
 							tmp = u;
 							u = v;
 							v = tmp;
 						}
 
-						String key = u.getId() + "_" + v.getId();
+						boolean found = false;
 
-						if ((isPruned = prune.get(key)) == null) {
+						for (int i = 1; i < times.size(); i++) {
+							found = false;
 
-							if (u.getDegree() > v.getDegree()) {
-								tmp = u;
-								u = v;
-								v = tmp;
-							}
+							Iterable<Relationship> rels = u.getRelationships(Direction.BOTH,
+									relationships.get(times.get(i)));
 
-							boolean found = false;
-
-							for (int i = 1; i < times.size(); i++) {
-								found = false;
-
-								Iterable<Relationship> rels = u.getRelationships(Direction.BOTH,
-										relationships.get(times.get(i)));
-
-								for (Relationship r : rels) {
-									if (r.getOtherNode(u).equals(v)) {
-										found = true;
-										break;
-									}
-								}
-
-								if (!found) {
-									prune.put(key, true);
-									return Evaluation.EXCLUDE_AND_PRUNE;
+							for (Relationship r : rels) {
+								if (r.getOtherNode(u).equals(v)) {
+									found = true;
+									break;
 								}
 							}
 
-							prune.put(key, false);
-						} else if (isPruned) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
+							if (!found)
+								return Evaluation.EXCLUDE_AND_PRUNE;
+
 						}
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
@@ -343,7 +314,7 @@ public class MultiTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<String> reachabilityBFSAtLeast(Node src, List<Integer> times, int k) {
+	protected List<String> reachabilityGlobalBFSAtLeast(Node src, List<Integer> times, int k) {
 
 		Set<String> pairs = new HashSet<>();
 		Map<String, BitSet> inter = new HashMap<>();
@@ -463,7 +434,7 @@ public class MultiTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<Node> reachabilityBFS(Node src, int t) {
+	protected List<Node> reachabilityGlobalBFS(Node src, int t) {
 		List<Node> nodes = new ArrayList<>();
 
 		for (Path currentNode : graphdb.traversalDescription().breadthFirst()

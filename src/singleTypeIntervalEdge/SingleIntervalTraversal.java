@@ -96,7 +96,7 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 									if (tend[j] < start)
 										continue;
 
-									if (tstart[j] > end)
+									if (tstart[j] > end || tend[j] == start)
 										break;
 
 									if (start >= tstart[j] && end <= tend[j]) {
@@ -161,7 +161,7 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 		String path = "";
 
 		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_GLOBAL).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -199,10 +199,9 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 	protected String pathTraversalConj(Node src, Node trg, List<Integer> times) {
 
 		String path = "";
-		Map<String, Boolean> prune = new HashMap<>();
 
 		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_PATH).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -215,50 +214,30 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 						String[] interval = null;
 						int start, end, j_ = 0;
 
-						Node u = path.lastRelationship().getStartNode();
-						Node v = path.lastRelationship().getEndNode();
-						Node tmp;
-						Boolean isPruned;
+						for (int i = 0; i < Queries.intervals.length; i++) {
+							interval = Queries.intervals[i].split("-");
+							start = Integer.parseInt(interval[0]);
+							end = Integer.parseInt(interval[1]);
 
-						if (u.getId() > v.getId()) {
-							tmp = u;
-							u = v;
-							v = tmp;
-						}
+							for (int j = j_; j < tstart.length; j++) {
 
-						String key = u.getId() + "_" + v.getId();
-
-						if ((isPruned = prune.get(key)) == null) {
-
-							for (int i = 0; i < Queries.intervals.length; i++) {
-								interval = Queries.intervals[i].split("-");
-								start = Integer.parseInt(interval[0]);
-								end = Integer.parseInt(interval[1]);
-
-								for (int j = j_; j < tstart.length; j++) {
-
-									if (tend[j] < start) {
-										if (j + 1 == tstart.length) {
-											prune.put(key, true);
-											return Evaluation.EXCLUDE_AND_PRUNE;
-										}
-										continue;
-									}
-
-									if (tstart[j] > end || (tend[j] < end && tend[j] >= start)) {
-										prune.put(key, true);
+								if (tend[j] < start) {
+									if (j + 1 == tstart.length) {
 										return Evaluation.EXCLUDE_AND_PRUNE;
 									}
+									continue;
+								}
 
-									if (start >= tstart[j] && end <= tend[j]) {
-										j_ = j;
-										break;
-									}
+								if ((tstart[j] > start && tstart[j] <= end) || tstart[j] >= end
+										|| (tend[j] < end && tend[j] >= start)) {
+									return Evaluation.EXCLUDE_AND_PRUNE;
+								}
+
+								if (start >= tstart[j] && end <= tend[j]) {
+									j_ = j;
+									break;
 								}
 							}
-							prune.put(key, false);
-						} else if (isPruned) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
 						}
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
@@ -281,7 +260,7 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 	protected boolean reachabilityBFS(Node src, Node trg, int time_instance) {
 
 		for (Node currentNode : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_GLOBAL).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -311,13 +290,12 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<Node> reachabilityBFSConj(Node src, List<Integer> times) {
+	protected List<Node> reachabilityGlobalBFSConj(Node src, List<Integer> times) {
 
 		Set<Node> nodes = new HashSet<>();
-		Map<String, Boolean> prune = new HashMap<>();
 
 		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_PATH).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -330,50 +308,29 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 						String[] interval = null;
 						int start, end, j_ = 0;
 
-						Node u = path.lastRelationship().getStartNode();
-						Node v = path.lastRelationship().getEndNode();
-						Node tmp;
-						Boolean isPruned;
+						for (int i = 0; i < Queries.intervals.length; i++) {
+							interval = Queries.intervals[i].split("-");
+							start = Integer.parseInt(interval[0]);
+							end = Integer.parseInt(interval[1]);
 
-						if (u.getId() > v.getId()) {
-							tmp = u;
-							u = v;
-							v = tmp;
-						}
+							for (int j = j_; j < tstart.length; j++) {
 
-						String key = u.getId() + "_" + v.getId();
-
-						if ((isPruned = prune.get(key)) == null) {
-
-							for (int i = 0; i < Queries.intervals.length; i++) {
-								interval = Queries.intervals[i].split("-");
-								start = Integer.parseInt(interval[0]);
-								end = Integer.parseInt(interval[1]);
-
-								for (int j = j_; j < tstart.length; j++) {
-
-									if (tend[j] < start) {
-										if (j + 1 == tstart.length) {
-											prune.put(key, true);
-											return Evaluation.EXCLUDE_AND_PRUNE;
-										}
-										continue;
-									}
-
-									if (tstart[j] > end || (tend[j] < end && tend[j] >= start)) {
-										prune.put(key, true);
+								if (tend[j] < start) {
+									if (j + 1 == tstart.length) {
 										return Evaluation.EXCLUDE_AND_PRUNE;
 									}
+									continue;
+								}
 
-									if (start >= tstart[j] && end <= tend[j]) {
-										j_ = j;
-										break;
-									}
+								if (tstart[j] > end || (tend[j] < end && tend[j] >= start)) {
+									return Evaluation.EXCLUDE_AND_PRUNE;
+								}
+
+								if (start >= tstart[j] && end <= tend[j]) {
+									j_ = j;
+									break;
 								}
 							}
-							prune.put(key, false);
-						} else if (isPruned) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
 						}
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
@@ -388,7 +345,7 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<String> reachabilityBFSAtLeast(Node src, List<Integer> times, int k) {
+	protected List<String> reachabilityGlobalBFSAtLeast(Node src, List<Integer> times, int k) {
 
 		Set<String> pairs = new HashSet<>();
 		Map<String, BitSet> inter = new HashMap<>();
@@ -491,11 +448,11 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<Node> reachabilityBFS(Node src, int time_instance) {
+	protected List<Node> reachabilityGlobalBFS(Node src, int time_instance) {
 		List<Node> nodes = new ArrayList<>();
 
 		for (Node currentNode : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_GLOBAL).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -516,7 +473,6 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 						return Evaluation.EXCLUDE_AND_PRUNE;
 					}
 				}).traverse(src).nodes()) {
-
 			nodes.add(currentNode);
 		}
 

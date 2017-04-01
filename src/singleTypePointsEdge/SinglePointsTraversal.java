@@ -148,7 +148,7 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 		String path = "";
 
 		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_GLOBAL).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -181,10 +181,9 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 	protected String pathTraversalConj(Node src, Node trg, List<Integer> times) {
 
 		String path = "";
-		Map<String, Boolean> prune = new HashMap<>();
 
 		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_PATH).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -192,33 +191,12 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 						if (path.length() == 0)
 							return Evaluation.EXCLUDE_AND_CONTINUE;
 
-						Node u = path.lastRelationship().getStartNode();
-						Node v = path.lastRelationship().getEndNode();
-						Node tmp;
-						Boolean isPruned;
+						int[] timeInstances = (int[]) path.lastRelationship().getProperty("time_instances");
 
-						if (u.getId() > v.getId()) {
-							tmp = u;
-							u = v;
-							v = tmp;
-						}
-
-						String key = u.getId() + "_" + v.getId();
-
-						if ((isPruned = prune.get(key)) == null) {
-
-							int[] timeInstances = (int[]) path.lastRelationship().getProperty("time_instances");
-
-							for (int time_instance : times) {
-								if (Arrays.binarySearch(timeInstances, time_instance) < 0) {
-									prune.put(key, true);
-									return Evaluation.EXCLUDE_AND_PRUNE;
-								}
+						for (int time_instance : times) {
+							if (Arrays.binarySearch(timeInstances, time_instance) < 0) {
+								return Evaluation.EXCLUDE_AND_PRUNE;
 							}
-
-							prune.put(key, false);
-						} else if (isPruned) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
 						}
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
@@ -241,7 +219,7 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 	protected boolean reachabilityBFS(Node src, Node trg, int time_instance) {
 
 		for (Node currentNode : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_GLOBAL).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -266,13 +244,12 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<Node> reachabilityBFSConj(Node src, List<Integer> times) {
+	protected List<Node> reachabilityGlobalBFSConj(Node src, List<Integer> times) {
 
 		Set<Node> nodes = new HashSet<>();
-		Map<String, Boolean> prune = new HashMap<>();
 
 		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_PATH).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
@@ -280,33 +257,11 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 						if (path.length() == 0)
 							return Evaluation.EXCLUDE_AND_CONTINUE;
 
-						Node u = path.lastRelationship().getStartNode();
-						Node v = path.lastRelationship().getEndNode();
-						Node tmp;
-						Boolean isPruned;
+						int[] timeInstances = (int[]) path.lastRelationship().getProperty("time_instances");
 
-						if (u.getId() > v.getId()) {
-							tmp = u;
-							u = v;
-							v = tmp;
-						}
-
-						String key = u.getId() + "_" + v.getId();
-
-						if ((isPruned = prune.get(key)) == null) {
-
-							int[] timeInstances = (int[]) path.lastRelationship().getProperty("time_instances");
-
-							for (int time_instance : times) {
-								if (Arrays.binarySearch(timeInstances, time_instance) < 0) {
-									prune.put(key, true);
-									return Evaluation.EXCLUDE_AND_PRUNE;
-								}
-							}
-
-							prune.put(key, false);
-						} else if (isPruned) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
+						for (int time_instance : times) {
+							if (Arrays.binarySearch(timeInstances, time_instance) < 0)
+								return Evaluation.EXCLUDE_AND_PRUNE;
 						}
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
@@ -321,7 +276,7 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<String> reachabilityBFSAtLeast(Node src, List<Integer> times, int k) {
+	protected List<String> reachabilityGlobalBFSAtLeast(Node src, List<Integer> times, int k) {
 
 		Set<String> pairs = new HashSet<>();
 		Map<String, BitSet> inter = new HashMap<>();
@@ -410,11 +365,11 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected List<Node> reachabilityBFS(Node src, int time_instance) {
+	protected List<Node> reachabilityGlobalBFS(Node src, int time_instance) {
 		List<Node> nodes = new ArrayList<>();
 
 		for (Node currentNode : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_GLOBAL).evaluator(new Evaluator() {
+				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
 
 					@Override
 					public Evaluation evaluate(final Path path) {
