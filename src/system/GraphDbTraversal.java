@@ -1,12 +1,14 @@
 package system;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Queue;
 import java.util.Set;
 
 import org.neo4j.graphdb.Direction;
@@ -14,6 +16,8 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
+
+import multiTypeEdge.MultiTraversal;
 
 /**
  * GraphDbTraversal Abstract Class
@@ -39,16 +43,18 @@ public abstract class GraphDbTraversal {
 	public GraphDbTraversal(GraphDatabaseService graphdb) {
 		this.graphdb = graphdb;
 	}
-
+	
+	
+	public abstract List<RelationshipType> getAdjRelation();
+	
 	/**
-	 * Reachability computation between src -> trg
-	 * 
-	 * @param src
-	 * @param trg
+	 * Return as BitSet the lifespan of the given relatioship
 	 * @param rel
+	 * @param I
 	 * @return
 	 */
-	protected abstract boolean reachabilityBFS(Node src, Node trg, int t);
+	protected abstract BitSet getLifespan(Relationship rel, BitSet I);
+
 
 	/**
 	 * Load graph db types
@@ -60,10 +66,10 @@ public abstract class GraphDbTraversal {
 	 * 
 	 * @param src
 	 * @param trg
-	 * @param time_instance
+	 * @param times
 	 * @return
 	 */
-	protected abstract String pathTraversalDisj(Node src, Node trg, int t);
+	protected abstract String pathTraversalDisj(Node src, Node trg, List<Integer> times);
 
 	/**
 	 * Path computation for conjunctive query
@@ -89,237 +95,6 @@ public abstract class GraphDbTraversal {
 	protected abstract String pathTraversalAtLeast(Node src, Node trg, List<Integer> times, int k);
 
 	/**
-	 * Traversal from src looking for disjunctive connections
-	 * 
-	 * @param src
-	 * @param t
-	 * @return
-	 */
-	protected abstract List<Node> reachabilityBFS(Node src, int t);
-
-	/**
-	 * Traversal from src looking for conjunctive connections
-	 * 
-	 * @param src
-	 * @param times
-	 * @return
-	 */
-	protected abstract List<Node> reachabilityBFSConj(Node src, List<Integer> times);
-
-	/**
-	 * Traversal from src looking for connections with at least k duration
-	 * 
-	 * @param src
-	 * @param times
-	 * @return
-	 */
-	protected abstract List<String> reachabilityBFSAtLeast(Node src, List<Integer> times, int k);
-
-	/**
-	 * Find all connected pairs that are connected at least 1 time
-	 * 
-	 * @param times
-	 * @return
-	 */
-	public String disjunctiveReachability(Set<Integer> times) {
-		Set<String> pairs = new HashSet<>();
-		List<Node> comp;
-		int u_id, v_id;
-		String pair;
-
-		for (int t : times) {
-			Set<Node> nodes = new HashSet<>();
-			Set<Node> found;
-
-			if (Queries.TIME_INDEX_ENABLED) {
-
-				Node time = graphdb.findNode(Queries.timeNodeLabel, Queries.timeNodeProperty, "" + t);
-
-				for (Relationship rel : time.getRelationships()) {
-					nodes.add(rel.getEndNode());
-				}
-
-				found = new HashSet<>(nodes.size());
-			} else {
-				// TODO
-				found = new HashSet<>();
-			}
-
-			for (Node n : nodes) {
-				if (found.contains(n))
-					continue;
-
-				comp = reachabilityBFS(n, t);
-
-				for (int i = 0; i < comp.size(); i++) {
-					u_id = Integer.parseInt("" + comp.get(i).getProperty("id"));
-
-					for (int j = i + 1; j < comp.size(); j++) {
-						v_id = Integer.parseInt("" + comp.get(j).getProperty("id"));
-
-						if (u_id > v_id)
-							pair = "" + v_id + "," + u_id;
-						else
-							pair = "" + u_id + "," + v_id;
-
-						if (!pairs.contains(pair))
-							pairs.add(pair);
-					}
-				}
-				found.addAll(comp);
-			}
-		}
-
-		if (pairs.isEmpty())
-			return "no pairs exist";
-
-		pair = "";
-		for (String p : pairs) {
-			pair += "(" + p + ")";
-		}
-
-		return pair;
-	}
-
-	/**
-	 * Find all connected pairs that are connected in all times
-	 * 
-	 * @param times
-	 * @return
-	 */
-	public String conjunctiveReachability(Set<Integer> times) {
-		Set<String> pairs = new HashSet<>();
-		Set<Node> nodes = new HashSet<>(), found;
-		List<Node> comp;
-		int u_id, v_id;
-		String pair;
-
-		for (int t : times) {
-			Set<Node> tmp = new HashSet<>();
-
-			if (Queries.TIME_INDEX_ENABLED) {
-
-				Node time = graphdb.findNode(Queries.timeNodeLabel, Queries.timeNodeProperty, "" + t);
-
-				for (Relationship rel : time.getRelationships()) {
-					tmp.add(rel.getEndNode());
-				}
-
-				if (nodes.isEmpty()) {
-					nodes.addAll(tmp);
-				} else {
-					nodes.retainAll(tmp);
-
-					if (nodes.isEmpty())
-						return "no pairs exist";
-				}
-
-			} else {
-				// TODO
-			}
-		}
-
-		found = new HashSet<>(nodes.size());
-		List<Integer> times_ = new ArrayList<>(times);
-		Collections.sort(times_);
-
-		for (Node n : nodes) {
-			if (found.contains(n))
-				continue;
-
-			comp = reachabilityBFSConj(n, times_);
-
-			for (int i = 0; i < comp.size(); i++) {
-				u_id = Integer.parseInt("" + comp.get(i).getProperty("id"));
-
-				for (int j = i + 1; j < comp.size(); j++) {
-					v_id = Integer.parseInt("" + comp.get(j).getProperty("id"));
-
-					if (u_id > v_id)
-						pair = "" + v_id + "," + u_id;
-					else
-						pair = "" + u_id + "," + v_id;
-
-					if (!pairs.contains(pair))
-						pairs.add(pair);
-				}
-			}
-			found.addAll(comp);
-		}
-
-		pair = "";
-
-		if (pairs.isEmpty())
-			return "no pairs exist";
-
-		for (String p : pairs) {
-			pair += "(" + p + ")";
-		}
-
-		return pair;
-	}
-
-	/**
-	 * Find all connected pairs that are connected at least k times
-	 * 
-	 * @param times
-	 * @param k
-	 * @return
-	 */
-	public String atLeastReachability(Set<Integer> times, int k) {
-
-		Set<String> pairs = new HashSet<>();
-		Map<Node, Counter> nodes = new HashMap<>();
-		Set<String> found;
-		Counter c;
-		Node n;
-		String pair;
-
-		for (int t : times) {
-
-			if (Queries.TIME_INDEX_ENABLED) {
-
-				Node time = graphdb.findNode(Queries.timeNodeLabel, Queries.timeNodeProperty, "" + t);
-
-				for (Relationship rel : time.getRelationships()) {
-					n = rel.getEndNode();
-
-					if ((c = nodes.get(n)) == null) {
-						c = new Counter();
-						nodes.put(n, c);
-					} else
-						c.increase();
-				}
-			} else {
-				// TODO
-			}
-		}
-
-		found = new HashSet<>(nodes.size());
-		List<Integer> times_ = new ArrayList<>(times);
-		Collections.sort(times_);
-
-		for (Entry<Node, Counter> e : nodes.entrySet()) {
-			n = e.getKey();
-
-			if (e.getValue().getValue() < k )
-				continue;
-
-			found.addAll(reachabilityBFSAtLeast(n, times_, k));
-		}
-
-		if (pairs.isEmpty())
-			return "no pairs exist";
-
-		pair = "";
-		for (String p : pairs) {
-			pair += "(" + p + ")";
-		}
-
-		return pair;
-	}
-
-	/**
 	 * Connection src -> trg in all times
 	 * 
 	 * @param src
@@ -332,13 +107,10 @@ public abstract class GraphDbTraversal {
 		if (!checkLifespan(src, times).isEmpty() || !checkLifespan(trg, times).isEmpty())
 			return false;
 
-		for (int t : times) {
-			if (!reachabilityBFS(src, trg, t)) {
-				return false;
-			}
-		}
-
-		return true;
+		List<Integer> times_ = new ArrayList<>(times);
+		Collections.sort(times_);
+		
+		return conjunctiveBFS(src, trg, times_);
 	}
 
 	/**
@@ -358,14 +130,13 @@ public abstract class GraphDbTraversal {
 		t2 = new HashSet<>(times);
 		t2.removeAll(checkLifespan(trg, times));
 		t1.retainAll(t2);
-
-		for (int t : t1) {
-			if (reachabilityBFS(src, trg, t)) {
-				return true;
-			}
-		}
-
-		return false;
+		
+		List<Integer> times_ = new ArrayList<>(t1);
+		
+		if (! (this instanceof MultiTraversal) )
+			Collections.sort(times_);
+		
+		return disjunctiveBFS(src, trg, times_);
 	}
 
 	/**
@@ -388,15 +159,13 @@ public abstract class GraphDbTraversal {
 
 		if (t1.size() < k)
 			return false;
+		
+		List<Integer> times_ = new ArrayList<>(t1);
 
-		for (int t : t1) {
-			if (reachabilityBFS(src, trg, t)) {
-				if (--k == 0)
-					return true;
-			}
-		}
-
-		return true;
+		if (! (this instanceof MultiTraversal) )
+			Collections.sort(times_);
+		
+		return atLeastKBFS(src, trg, times_, k);
 	}
 
 	/**
@@ -435,22 +204,21 @@ public abstract class GraphDbTraversal {
 	public String disjunctivePath(Node src, Node trg, Set<Integer> times) {
 
 		Set<Integer> t1, t2;
-		String path = null;
 
 		t1 = new HashSet<>(times);
 		t1.removeAll(checkLifespan(src, times));
 		t2 = new HashSet<>(times);
 		t2.removeAll(checkLifespan(trg, times));
 		t1.retainAll(t2);
-
-		for (int t : t1) {
-			path = pathTraversalDisj(src, trg, t);
-
-			if (!path.isEmpty())
-				return path;
-		}
-
-		return "no path exists";
+		
+		List<Integer> times_ = new ArrayList<>(t1);
+		
+		if (! (this instanceof MultiTraversal) )
+			Collections.sort(times_);
+		
+		String path = "no path exists";
+		path = pathTraversalDisj(src, trg, times_);	
+		return path;
 	}
 
 	/**
@@ -486,6 +254,197 @@ public abstract class GraphDbTraversal {
 
 		return "no path exists";
 	}
+	
+	/******************************** Traversals ********************************/
+
+	protected boolean disjunctiveBFS(Node src, Node trg, List<Integer> times) {
+		Map<Node, BitSet> traversedI = new HashMap<>();
+		Queue<Node> toBeTraversed = new LinkedList<Node>();
+		Queue<BitSet> intervalToBeChecked = new LinkedList<BitSet>();
+		BitSet interval = new BitSet();
+		
+		RelationshipType adjRelation = getAdjRelation().get(0);
+
+		for (int t : times)
+			interval.set(t);
+
+		toBeTraversed.add(src);
+		intervalToBeChecked.add(interval);
+		traversedI.put(src, (BitSet) interval.clone());
+
+		Node n, w;
+		BitSet iQ, I, eI, life;
+
+		while (!toBeTraversed.isEmpty()) {
+			n = toBeTraversed.poll();
+			iQ = intervalToBeChecked.poll();
+
+			// for all the adjacencies
+			for (Relationship rel : n.getRelationships(Direction.BOTH, adjRelation)) {
+				w = rel.getOtherNode(n);
+
+				eI = getLifespan(rel, interval);
+
+				I = (BitSet) iQ.clone();
+				I.and(eI);
+
+				if (I.isEmpty())
+					continue;
+
+				// trg node found
+				if (w.equals(trg))
+					return true;
+
+				if ((life = traversedI.get(w)) == null) {
+
+					// puts the traversed time for trg_node
+					traversedI.put(w, (BitSet) I.clone());
+
+					toBeTraversed.add(w);
+					intervalToBeChecked.add((BitSet) I.clone());
+				} else if (!refine(life, I)) {
+					toBeTraversed.add(w);
+					intervalToBeChecked.add((BitSet) I.clone());
+				}
+			}
+		}
+		return false;
+	}
+	
+	/**
+	 * 
+	 * @param src
+	 * @param trg
+	 * @param times
+	 * @return
+	 */
+	protected boolean conjunctiveBFS(Node src, Node trg, List<Integer> times) {
+
+		Map<Node, BitSet> traversedI = new HashMap<>();
+		Queue<Node> toBeTraversed = new LinkedList<Node>();
+		Queue<BitSet> intervalToBeChecked = new LinkedList<BitSet>();
+		BitSet interval = new BitSet(), R = new BitSet();
+		
+		RelationshipType adjRelation = getAdjRelation().get(0);
+
+		for (int t : times)
+			interval.set(t);
+
+		toBeTraversed.add(src);
+		intervalToBeChecked.add(interval);
+		traversedI.put(src, (BitSet) interval.clone());
+
+		Node n, w;
+		BitSet iQ, I, eI, life;
+
+		while (!toBeTraversed.isEmpty()) {
+			n = toBeTraversed.poll();
+			iQ = intervalToBeChecked.poll();
+
+			// for all the adjacencies
+			for (Relationship rel : n.getRelationships(Direction.BOTH, adjRelation)) {
+				w = rel.getOtherNode(n);
+
+				eI = getLifespan(rel, interval);
+
+				// join edge lifespan with iQ
+				I = (BitSet) iQ.clone();
+				I.and(eI);
+
+				if (I.isEmpty())
+					continue;
+
+				// trg node found
+				if (w.equals(trg)) {
+
+					// R merge with I
+					R.or(I);
+
+					if (R.equals(interval))
+						return true;
+				}
+
+				if ((life = traversedI.get(w)) == null) {
+
+					// puts the traversed time for trg_node
+					traversedI.put(w, (BitSet) I.clone());
+
+					toBeTraversed.add(w);
+					intervalToBeChecked.add((BitSet) I.clone());
+				} else if (!refine(life, I)) {
+					toBeTraversed.add(w);
+					intervalToBeChecked.add((BitSet) I.clone());
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 
+	 * @param src
+	 * @param trg
+	 * @param times
+	 * @param k
+	 * @return
+	 */
+	protected boolean atLeastKBFS(Node src, Node trg, List<Integer> times, int k) {
+
+		Map<Node, BitSet> traversedI = new HashMap<>();
+		Queue<Node> toBeTraversed = new LinkedList<Node>();
+		Queue<BitSet> intervalToBeChecked = new LinkedList<BitSet>();
+		BitSet interval = new BitSet();
+		
+		RelationshipType adjRelation = getAdjRelation().get(0);
+
+		for (int t : times)
+			interval.set(t);
+
+		toBeTraversed.add(src);
+		intervalToBeChecked.add(interval);
+		traversedI.put(src, (BitSet) interval.clone());
+
+		Node n, w;
+		BitSet iQ, I, eI, life;
+
+		while (!toBeTraversed.isEmpty()) {
+			n = toBeTraversed.poll();
+			iQ = intervalToBeChecked.poll();
+
+			// for all the adjacencies
+			for (Relationship rel : n.getRelationships(Direction.BOTH, adjRelation)) {
+				w = rel.getOtherNode(n);
+
+				eI = getLifespan(rel, interval);
+
+				// join edge lifespan with iQ
+				I = (BitSet) iQ.clone();
+				I.and(eI);
+
+				if (I.isEmpty())
+					continue;
+
+				// trg node found
+				if (w.equals(trg) && I.cardinality() >= k)
+					return true;
+
+				if ((life = traversedI.get(w)) == null) {
+
+					// puts the traversed time for trg_node
+					traversedI.put(w, (BitSet) I.clone());
+
+					toBeTraversed.add(w);
+					intervalToBeChecked.add((BitSet) I.clone());
+				} else if (!refine(life, I)) {
+					toBeTraversed.add(w);
+					intervalToBeChecked.add((BitSet) I.clone());
+				}
+			}
+		}
+		return false;
+	}
+	
+	/******************************** Util methods ********************************/
 
 	/**
 	 * Return times where node n was alive
@@ -496,11 +455,28 @@ public abstract class GraphDbTraversal {
 	 */
 	private Set<Integer> checkLifespan(Node n, Set<Integer> times) {
 		Set<Integer> t = new HashSet<>(times);
-
+		
 		for (Relationship rel : n.getRelationships(RelTypes.EXISTS, Direction.INCOMING)) {
 			t.remove(Integer.parseInt(rel.getStartNode().getProperty("timeInstance").toString()));
 		}
 
 		return t;
+	}
+	
+	/**
+	 * Checks if pruning will be done for node that has been already traversed
+	 * @param INb
+	 * @param I
+	 * @return
+	 */
+	protected boolean refine(BitSet INb, BitSet I) {
+		for (int i = 0; i < I.length(); i++) {
+			if (I.get(i) && !INb.get(i)) {
+				// if pruning will not be done then update the traversedBitset with the new time instants
+				INb.or(I);
+				return false;
+			}
+		}
+		return true;
 	}
 }

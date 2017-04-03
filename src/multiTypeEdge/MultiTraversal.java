@@ -3,10 +3,8 @@ package multiTypeEdge;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -50,7 +48,7 @@ public class MultiTraversal extends GraphDbTraversal {
 
 	@Override
 	protected String pathTraversalAtLeast(Node src, Node trg, List<Integer> times, int k) {
-
+		// TODO
 		String path = "";
 		BitSet interval = new BitSet();
 		HashBasedTable<Integer, Integer, BitSet> inter = HashBasedTable.create(100000, 100);
@@ -74,17 +72,16 @@ public class MultiTraversal extends GraphDbTraversal {
 						Node v = path.lastRelationship().getEndNode();
 						Node tmp;
 						BitSet edge_lifespan;
-						
+
 						int u_id = Integer.parseInt("" + u.getProperty("id"));
 						int v_id = Integer.parseInt("" + v.getProperty("id"));
 						int tmp_;
-						
+
 						if (u_id > v_id) {
 							tmp_ = u_id;
 							u_id = v_id;
 							v_id = tmp_;
 						}
-
 
 						if ((edge_lifespan = inter.get(u_id, v_id)) == null) {
 							edge_lifespan = new BitSet();
@@ -121,15 +118,14 @@ public class MultiTraversal extends GraphDbTraversal {
 						} else if (path.endNode().equals(trg)) {
 							return Evaluation.INCLUDE_AND_PRUNE;
 						}
-						
+
 						if (path.lastRelationship().getEndNode().equals(src))
 							return Evaluation.EXCLUDE_AND_PRUNE;
-
 
 						return Evaluation.INCLUDE_AND_CONTINUE;
 					}
 
-				}).traverse(src)) {				
+				}).traverse(src)) {
 
 			if (p.endNode().equals(trg)) {
 				BitSet I = (BitSet) interval.clone();
@@ -165,29 +161,33 @@ public class MultiTraversal extends GraphDbTraversal {
 	}
 
 	@Override
-	protected String pathTraversalDisj(Node src, Node trg, int t) {
+	protected String pathTraversalDisj(Node src, Node trg, List<Integer> times) {
 
 		String path = "";
 
-		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(relationships.get(t), Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_GLOBAL).evaluator(new Evaluator() {
+		for (int t : times) {
 
-					@Override
-					public Evaluation evaluate(final Path path) {
+			for (Path p : graphdb.traversalDescription().breadthFirst()
+					.relationships(relationships.get(t), Direction.BOTH).uniqueness(Uniqueness.NODE_GLOBAL)
+					.evaluator(new Evaluator() {
 
-						if (path.length() == 0)
-							return Evaluation.EXCLUDE_AND_CONTINUE;
+						@Override
+						public Evaluation evaluate(final Path path) {
 
-						return Evaluation.INCLUDE_AND_CONTINUE;
-					}
-				}).traverse(src)) {
+							if (path.length() == 0)
+								return Evaluation.EXCLUDE_AND_CONTINUE;
 
-			if (p.endNode().equals(trg)) {
-				if (Queries.simplePath)
-					path += Paths.simplePathToString(p);
-				else
-					path += Paths.pathToString(p, pathPrinter);
-				return path;
+							return Evaluation.INCLUDE_AND_CONTINUE;
+						}
+					}).traverse(src)) {
+
+				if (p.endNode().equals(trg)) {
+					if (Queries.simplePath)
+						path += Paths.simplePathToString(p);
+					else
+						path += Paths.pathToString(p, pathPrinter);
+					return path;
+				}
 			}
 		}
 
@@ -256,194 +256,73 @@ public class MultiTraversal extends GraphDbTraversal {
 		return path;
 	}
 
-	@Override
-	protected List<Node> reachabilityGlobalBFSConj(Node src, List<Integer> times) {
-
-		Set<Node> nodes = new HashSet<>();
-
-		for (Path p : graphdb.traversalDescription().breadthFirst()
-				.relationships(relationships.get(times.get(0)), Direction.BOTH)
-				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
-
-					@Override
-					public Evaluation evaluate(final Path path) {
-
-						if (path.length() == 0)
-							return Evaluation.EXCLUDE_AND_CONTINUE;
-
-						Node u = path.lastRelationship().getStartNode();
-						Node v = path.lastRelationship().getEndNode();
-						Node tmp;
-
-						if (u.getDegree() > v.getDegree()) {
-							tmp = u;
-							u = v;
-							v = tmp;
-						}
-
-						boolean found = false;
-
-						for (int i = 1; i < times.size(); i++) {
-							found = false;
-
-							Iterable<Relationship> rels = u.getRelationships(Direction.BOTH,
-									relationships.get(times.get(i)));
-
-							for (Relationship r : rels) {
-								if (r.getOtherNode(u).equals(v)) {
-									found = true;
-									break;
-								}
-							}
-
-							if (!found)
-								return Evaluation.EXCLUDE_AND_PRUNE;
-
-						}
-
-						return Evaluation.INCLUDE_AND_CONTINUE;
-					}
-
-				}).traverse(src)) {
-
-			nodes.add(p.endNode());
-			nodes.add(p.startNode());
-		}
-
-		return new ArrayList<>(nodes);
-	}
+	/******************************** Traversals ********************************/
 
 	@Override
-	protected List<String> reachabilityGlobalBFSAtLeast(Node src, List<Integer> times, int k) {
+	protected boolean disjunctiveBFS(Node src, Node trg, List<Integer> times) {
 
-		Set<String> pairs = new HashSet<>();
-		Map<String, BitSet> inter = new HashMap<>();
-		BitSet interval = new BitSet();
+		for (int t : times) {
+			for (Node currentNode : graphdb.traversalDescription().breadthFirst()
+					.relationships(relationships.get(t), Direction.BOTH).uniqueness(Uniqueness.NODE_GLOBAL)
+					.traverse(src).nodes()) {
 
-		for (int t : times)
-			interval.set(t);
-
-		for (Path p : graphdb.traversalDescription().breadthFirst().uniqueness(Uniqueness.NODE_PATH)
-				.evaluator(new Evaluator() {
-
-					@Override
-					public Evaluation evaluate(final Path path) {
-
-						if (path.length() == 0)
-							return Evaluation.EXCLUDE_AND_CONTINUE;
-
-						if (path.lastRelationship().isType(RelTypes.EXISTS))
-							return Evaluation.EXCLUDE_AND_PRUNE;
-
-						Node u = path.lastRelationship().getStartNode();
-						Node v = path.lastRelationship().getEndNode();
-						Node tmp;
-						BitSet edge_lifespan;
-
-						int u_id = Integer.parseInt("" + u.getProperty("id"));
-						int v_id = Integer.parseInt("" + v.getProperty("id"));
-						int tmp_;
-
-						if (u_id > v_id) {
-							tmp_ = u_id;
-							u_id = v_id;
-							v_id = tmp_;
-						}
-
-						String key = u_id + "," + v_id;
-
-						if ((edge_lifespan = inter.get(key)) == null) {
-							edge_lifespan = new BitSet();
-							inter.put(key, edge_lifespan);
-
-							if (u.getDegree() > v.getDegree()) {
-								tmp = u;
-								u = v;
-								v = tmp;
-							}
-
-							int counter = 0;
-
-							for (int i = 0; i < times.size(); i++) {
-
-								Iterable<Relationship> rels = u.getRelationships(Direction.BOTH,
-										relationships.get(times.get(i)));
-
-								for (Relationship r : rels) {
-
-									if (r.getOtherNode(u).equals(v)) {
-										edge_lifespan.set(times.get(i));
-										counter++;
-										break;
-									}
-								}
-
-								if (times.size() - 1 - i + counter < k)
-									return Evaluation.EXCLUDE_AND_PRUNE;
-							}
-
-						} else if (edge_lifespan.cardinality() < k) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
-						}
-
-						return Evaluation.INCLUDE_AND_CONTINUE;
-					}
-
-				}).traverse(src)) {
-
-			BitSet I = (BitSet) interval.clone();
-			String key = null;
-
-			for (Relationship rel_ : p.relationships()) {
-				int u_id = Integer.parseInt("" + rel_.getStartNode().getProperty("id"));
-				int v_id = Integer.parseInt("" + rel_.getEndNode().getProperty("id"));
-				int tmp;
-
-				if (u_id > v_id) {
-					tmp = u_id;
-					u_id = v_id;
-					v_id = tmp;
-				}
-
-				key = u_id + "," + v_id;
-
-				I.and(inter.get(key));
-
-				if (I.cardinality() < k)
-					break;
-				else
-					pairs.add(key);
+				if (currentNode.equals(trg))
+					return true;
 			}
-		}
-
-		return new ArrayList<>(pairs);
-	}
-
-	@Override
-	protected boolean reachabilityBFS(Node src, Node trg, int t) {
-
-		for (Node currentNode : graphdb.traversalDescription().breadthFirst()
-				.relationships(relationships.get(t), Direction.BOTH).uniqueness(Uniqueness.NODE_GLOBAL).traverse(src)
-				.nodes()) {
-
-			if (currentNode.equals(trg))
-				return true;
 		}
 
 		return false;
 	}
 
 	@Override
-	protected List<Node> reachabilityGlobalBFS(Node src, int t) {
-		List<Node> nodes = new ArrayList<>();
+	protected boolean conjunctiveBFS(Node src, Node trg, List<Integer> times) {
+		boolean found;
 
-		for (Path currentNode : graphdb.traversalDescription().breadthFirst()
-				.relationships(relationships.get(t), Direction.BOTH).uniqueness(Uniqueness.NODE_GLOBAL).traverse(src)) {
-			nodes.add(currentNode.endNode());
+		for (int t : times) {
+
+			found = false;
+
+			for (Node currentNode : graphdb.traversalDescription().breadthFirst()
+					.relationships(relationships.get(t), Direction.BOTH).uniqueness(Uniqueness.NODE_GLOBAL)
+					.traverse(src).nodes()) {
+
+				if (currentNode.equals(trg)) {
+					found = true;
+					break;
+				}
+			}
+
+			if (!found) {
+				return false;
+			}
 		}
 
-		return nodes;
+		return true;
 	}
+
+	@Override
+	protected boolean atLeastKBFS(Node src, Node trg, List<Integer> times, int k) {
+		int counter = 0;
+
+		for (int i = 0; i < times.size(); i++) {
+			for (Node currentNode : graphdb.traversalDescription().breadthFirst()
+					.relationships(relationships.get(times.get(i)), Direction.BOTH).uniqueness(Uniqueness.NODE_GLOBAL)
+					.traverse(src).nodes()) {
+
+				if (currentNode.equals(trg)) {
+					counter++;
+					break;
+				}
+			}
+
+			if (counter + times.size() - i <= k)
+				return false;
+		}
+
+		return true;
+	}
+
+	/******************************** Util ********************************/
 
 	@Override
 	protected void loadTypes() {
@@ -465,5 +344,16 @@ public class MultiTraversal extends GraphDbTraversal {
 
 			tx.success();
 		}
+	}
+
+	@Override
+	protected BitSet getLifespan(Relationship rel, BitSet I) {
+		// Not supported for this type
+		return null;
+	}
+
+	@Override
+	public List<RelationshipType> getAdjRelation() {
+		return new ArrayList<>(relationships.values());
 	}
 }
