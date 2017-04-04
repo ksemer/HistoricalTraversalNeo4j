@@ -3,28 +3,15 @@ package singleTypePointsEdge;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
-import org.neo4j.graphalgo.GraphAlgoFactory;
-import org.neo4j.graphalgo.PathFinder;
-import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.Path;
-import org.neo4j.graphdb.PathExpanders;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.schema.IndexDefinition;
-import org.neo4j.graphdb.traversal.Evaluation;
-import org.neo4j.graphdb.traversal.Evaluator;
-import org.neo4j.graphdb.traversal.Paths;
-import org.neo4j.graphdb.traversal.Uniqueness;
 
-import system.Queries;
 import system.GraphDbTraversal;
 
 /**
@@ -49,218 +36,6 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 		loadTypes();
 	}
 
-	// @Override
-	protected String pathTraversalAtLeast1(Node src, Node trg, List<Integer> times, int k) {
-
-		String path = "";
-		Map<String, BitSet> inter = new HashMap<>();
-		BitSet interval = new BitSet();
-
-		for (int t : times)
-			interval.set(t);
-
-		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.NODE_PATH).evaluator(new Evaluator() {
-					@Override
-					public Evaluation evaluate(final Path path) {
-
-						if (path.length() == 0)
-							return Evaluation.EXCLUDE_AND_CONTINUE;
-
-						Node u = path.lastRelationship().getStartNode();
-						Node v = path.lastRelationship().getEndNode();
-						Node tmp;
-						BitSet edge_lifespan;
-
-						if (u.getId() > v.getId()) {
-							tmp = u;
-							u = v;
-							v = tmp;
-						}
-
-						String key = u.getId() + "_" + v.getId();
-
-						if ((edge_lifespan = inter.get(key)) == null) {
-							edge_lifespan = new BitSet();
-							inter.put(key, edge_lifespan);
-
-							int counter = 0;
-
-							for (int i = 0; i < times.size(); i++) {
-
-								int[] timeInstances = (int[]) path.lastRelationship().getProperty("time_instances");
-
-								if (Arrays.binarySearch(timeInstances, times.get(i)) >= 0) {
-									edge_lifespan.set(times.get(i));
-									counter++;
-								}
-
-								if (times.size() - 1 - i + counter < k)
-									return Evaluation.EXCLUDE_AND_PRUNE;
-							}
-						} else if (edge_lifespan.cardinality() < k) {
-							return Evaluation.EXCLUDE_AND_PRUNE;
-						} else if (path.endNode().equals(trg)) {
-							return Evaluation.INCLUDE_AND_PRUNE;
-						}
-
-						return Evaluation.INCLUDE_AND_CONTINUE;
-					}
-
-				}).traverse(src)) {
-
-			if (p.endNode().equals(trg)) {
-				BitSet I = (BitSet) interval.clone();
-				String key;
-
-				for (Relationship rel_ : p.relationships()) {
-					long u_id = rel_.getStartNode().getId();
-					long v_id = rel_.getEndNode().getId();
-					long tmp;
-
-					if (u_id > v_id) {
-						tmp = u_id;
-						u_id = v_id;
-						v_id = tmp;
-					}
-
-					key = u_id + "_" + v_id;
-					I.and(inter.get(key));
-
-					if (I.cardinality() < k)
-						break;
-				}
-
-				if (I.cardinality() >= k) {
-					if (Queries.simplePath)
-						path += Paths.simplePathToString(p);
-					else
-						path += Paths.pathToString(p, pathPrinter);
-					return path;
-				}
-			}
-		}
-
-		return path;
-	}
-
-	protected String pathTraversalAtLeast(Node src, Node trg, List<Integer> times, int k) {
-
-		String path = "";
-		BitSet interval = new BitSet();
-
-		for (int t : times)
-			interval.set(t);
-
-		PathFinder<Path> pathFinder = GraphAlgoFactory
-				.allSimplePaths(PathExpanders.forTypeAndDirection(adjRelation, Direction.BOTH), 6);
-
-		for (Path p : pathFinder.findAllPaths(src, trg)) {
-
-			BitSet lifespan = (BitSet) interval.clone(), life_;
-
-			for (Relationship rel : p.relationships()) {
-				life_ = new BitSet();
-
-				for (int i = 0; i < times.size(); i++) {
-
-					int[] timeInstances = (int[]) rel.getProperty("time_instances");
-
-					if (Arrays.binarySearch(timeInstances, times.get(i)) >= 0) {
-						life_.set(times.get(i));
-					}
-				}
-
-				lifespan.and(life_);
-
-				if (lifespan.cardinality() < k)
-					break;
-			}
-
-			if (lifespan.cardinality() >= k) {
-				if (Queries.simplePath)
-					path += Paths.simplePathToString(p);
-				else
-					path += Paths.pathToString(p, pathPrinter);
-				return path;
-			}
-		}
-
-		return path;
-	}
-
-	protected String pathTraversalDisj(Node src, Node trg, int time_instance) {
-
-		String path = "";
-
-		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
-
-					@Override
-					public Evaluation evaluate(final Path path) {
-
-						if (path.length() == 0)
-							return Evaluation.EXCLUDE_AND_CONTINUE;
-
-						int[] timeInstances = (int[]) path.lastRelationship().getProperty("time_instances");
-
-						if (Arrays.binarySearch(timeInstances, time_instance) < 0)
-							return Evaluation.EXCLUDE_AND_PRUNE;
-
-						return Evaluation.INCLUDE_AND_CONTINUE;
-					}
-				}).traverse(src)) {
-
-			if (p.endNode().equals(trg)) {
-				if (Queries.simplePath)
-					path += Paths.simplePathToString(p);
-				else
-					path += Paths.pathToString(p, pathPrinter);
-				return path;
-			}
-		}
-
-		return path;
-	}
-
-	@Override
-	protected String pathTraversalConj(Node src, Node trg, List<Integer> times) {
-
-		String path = "";
-
-		for (Path p : graphdb.traversalDescription().breadthFirst().relationships(adjRelation, Direction.BOTH)
-				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
-
-					@Override
-					public Evaluation evaluate(final Path path) {
-
-						if (path.length() == 0)
-							return Evaluation.EXCLUDE_AND_CONTINUE;
-
-						int[] timeInstances = (int[]) path.lastRelationship().getProperty("time_instances");
-
-						for (int time_instance : times) {
-							if (Arrays.binarySearch(timeInstances, time_instance) < 0) {
-								return Evaluation.EXCLUDE_AND_PRUNE;
-							}
-						}
-
-						return Evaluation.INCLUDE_AND_CONTINUE;
-					}
-				}).traverse(src)) {
-
-			if (p.endNode().equals(trg)) {
-				if (Queries.simplePath)
-					path += Paths.simplePathToString(p);
-				else
-					path += Paths.pathToString(p, pathPrinter);
-				return path;
-			}
-		}
-
-		return path;
-	}
-
 	/******************************** Util ********************************/
 
 	@Override
@@ -283,36 +58,27 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 			tx.success();
 		}
 	}
-	
+
 	@Override
 	protected BitSet getLifespan(Relationship rel, BitSet I) {
 		BitSet lifespan = new BitSet();
-		int time_instance;		
+		int time_instance;
 		int[] timeInstances = (int[]) rel.getProperty("time_instances");
-		
+
 		for (Iterator<Integer> it = I.stream().iterator(); it.hasNext();) {
 			time_instance = it.next();
-			
+
 			if (Arrays.binarySearch(timeInstances, time_instance) >= 0)
 				lifespan.set(time_instance);
 		}
 		return lifespan;
 	}
-	
+
 	@Override
 	public List<RelationshipType> getAdjRelation() {
 		List<RelationshipType> rels = new ArrayList<>(1);
 		rels.add(adjRelation);
-		
-		return rels;	
+
+		return rels;
 	}
-
-
-	@Override
-	protected String pathTraversalDisj(Node src, Node trg, List<Integer> times) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-
 }
