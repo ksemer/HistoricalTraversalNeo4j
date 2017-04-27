@@ -4,6 +4,7 @@ import java.util.BitSet;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -68,15 +69,12 @@ public abstract class GraphDbTraversal {
 	 */
 	public boolean disjunctiveReachability(Node src, Node trg, Set<Integer> times) {
 
-		Set<Integer> t1, t2;
+		if (Config.TIME_INDEX_ENABLED) {
+			times.removeAll(checkLifespan(src, times));
+			times.removeAll(checkLifespan(trg, times));
+		}
 
-		t1 = new HashSet<>(times);
-		t1.removeAll(checkLifespan(src, times));
-		t2 = new HashSet<>(times);
-		t2.removeAll(checkLifespan(trg, times));
-		t1.retainAll(t2);
-
-		return disjunctiveBFS(src, trg, t1);
+		return disjunctiveBFS(src, trg, times);
 	}
 
 	/**
@@ -89,7 +87,7 @@ public abstract class GraphDbTraversal {
 	 */
 	public boolean conjunctiveReachability(Node src, Node trg, Set<Integer> times) {
 
-		if (!checkLifespan(src, times).isEmpty() || !checkLifespan(trg, times).isEmpty())
+		if (Config.TIME_INDEX_ENABLED && !(checkLifespan(src, times).isEmpty() && checkLifespan(trg, times).isEmpty()))
 			return false;
 
 		return conjunctiveBFS(src, trg, times);
@@ -106,18 +104,15 @@ public abstract class GraphDbTraversal {
 	 */
 	public boolean atLeastReachability(Node src, Node trg, Set<Integer> times, int k) {
 
-		Set<Integer> t1, t2;
+		if (Config.TIME_INDEX_ENABLED) {
+			times.removeAll(checkLifespan(src, times));
+			times.removeAll(checkLifespan(trg, times));
 
-		t1 = new HashSet<>(times);
-		t1.removeAll(checkLifespan(src, times));
-		t2 = new HashSet<>(times);
-		t2.removeAll(checkLifespan(trg, times));
-		t1.retainAll(t2);
+			if (times.size() < k)
+				return false;
+		}
 
-		if (t1.size() < k)
-			return false;
-
-		return atLeastKBFS(src, trg, t1, k);
+		return atLeastKBFS(src, trg, times, k);
 	}
 
 	/**
@@ -130,15 +125,12 @@ public abstract class GraphDbTraversal {
 	 */
 	public String disjunctivePath(Node src, Node trg, Set<Integer> times) {
 
-		Set<Integer> t1, t2;
+		if (Config.TIME_INDEX_ENABLED) {
+			times.removeAll(checkLifespan(src, times));
+			times.removeAll(checkLifespan(trg, times));
+		}
 
-		t1 = new HashSet<>(times);
-		t1.removeAll(checkLifespan(src, times));
-		t2 = new HashSet<>(times);
-		t2.removeAll(checkLifespan(trg, times));
-		t1.retainAll(t2);
-
-		String path = pathTraversalDisj(src, trg, t1);
+		String path = pathTraversalDisj(src, trg, times);
 
 		if (path.isEmpty())
 			return "no path exists";
@@ -158,7 +150,7 @@ public abstract class GraphDbTraversal {
 
 		String path = null;
 
-		if (!checkLifespan(src, times).isEmpty() || !checkLifespan(trg, times).isEmpty())
+		if (Config.TIME_INDEX_ENABLED && !(checkLifespan(src, times).isEmpty() && checkLifespan(trg, times).isEmpty()))
 			return "no path exists";
 
 		path = pathTraversalConj(src, trg, times);
@@ -180,19 +172,17 @@ public abstract class GraphDbTraversal {
 	 */
 	public String atLeastPath(Node src, Node trg, Set<Integer> times, int k) {
 
-		Set<Integer> t1, t2;
 		String path = "";
 
-		t1 = new HashSet<>(times);
-		t1.removeAll(checkLifespan(src, times));
-		t2 = new HashSet<>(times);
-		t2.removeAll(checkLifespan(trg, times));
-		t1.retainAll(t2);
+		if (Config.TIME_INDEX_ENABLED) {
+			times.removeAll(checkLifespan(src, times));
+			times.removeAll(checkLifespan(trg, times));
 
-		if (t1.size() < k)
-			return "no path exists";
+			if (times.size() < k)
+				return "no path exists";
+		}
 
-		path = pathTraversalAtLeast(src, trg, t1, k);
+		path = pathTraversalAtLeast(src, trg, times, k);
 
 		if (!path.isEmpty())
 			return path;
@@ -303,6 +293,8 @@ public abstract class GraphDbTraversal {
 
 					if (R.equals(interval))
 						return true;
+
+					continue;
 				}
 
 				if ((life = traversedI.get(w)) == null) {
@@ -334,7 +326,7 @@ public abstract class GraphDbTraversal {
 		Map<Node, BitSet> traversedI = new HashMap<>();
 		Queue<Node> toBeTraversed = new LinkedList<Node>();
 		Queue<BitSet> intervalToBeChecked = new LinkedList<BitSet>();
-		BitSet interval = new BitSet();
+		BitSet interval = new BitSet(), R = new BitSet();
 
 		RelationshipType adjRelation = getAdjRelation().get(0);
 
@@ -363,8 +355,16 @@ public abstract class GraphDbTraversal {
 				w = rel.getOtherNode(n);
 
 				// trg node found
-				if (w.equals(trg) && eI.cardinality() >= k)
-					return true;
+				if (w.equals(trg)) {
+
+					// R merge with I
+					R.or(eI);
+
+					if (R.cardinality() >= k)
+						return true;
+
+					continue;
+				}
 
 				if ((life = traversedI.get(w)) == null) {
 
@@ -555,7 +555,7 @@ public abstract class GraphDbTraversal {
 
 				eI = getLifespan(rel, iQ);
 
-				if (eI.cardinality() < k)
+				if (eI.isEmpty() || eI.cardinality() < k)
 					continue;
 
 				w = rel.getOtherNode(n);
@@ -587,7 +587,7 @@ public abstract class GraphDbTraversal {
 	/********************************* Util ********************************/
 
 	/**
-	 * Return times where node n was alive
+	 * Return times where node n was not alive
 	 * 
 	 * @param n
 	 * @param times
@@ -611,10 +611,10 @@ public abstract class GraphDbTraversal {
 	 * @return
 	 */
 	protected boolean refine(BitSet INb, BitSet I) {
-		for (int i = 0; i < I.length(); i++) {
-			if (I.get(i) && !INb.get(i)) {
-				// if pruning will not be done then update the traversedBitset
-				// with the new time instants
+		for (Iterator<Integer> it = I.stream().iterator(); it.hasNext();) {
+			int t = it.next();
+
+			if (!INb.get(t)) {
 				INb.or(I);
 				return false;
 			}

@@ -1,7 +1,6 @@
 package system;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -9,7 +8,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
@@ -18,35 +16,40 @@ import multiTypeEdge.MultiTraversal;
 import singleTypeIntervalEdge.SingleIntervalTraversal;
 import singleTypePointsEdge.SinglePointsTraversal;
 
+/**
+ * Queries class
+ * 
+ * @author ksemer
+ */
 public class Queries {
 
 	private static GraphDatabaseService graphDb;
 	public static String[] intervals;
 
-	private static final String NEO4J_PATH = "/experiments/neo4j-community-3.1.1/";
-	private static final File DB_PATH = new File(NEO4J_PATH + "data/databases/dblp_multi.db");
-	private static final Label nodeLabel = Label.label("Author");
-	public static final Label timeNodeLabel = Label.label("TimeInstance");
-	public static final String timeNodeProperty = "timeInstance";
-
-	private static final String QUERIES_PATH = "queriesReach";
-	public static final boolean TIME_INDEX_ENABLED = true;
-	public static final boolean simplePath = false;
-	private static int traversalType = 2;
-
 	public static void main(String[] args) throws NumberFormatException, IOException {
-		graphDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(DB_PATH)
-				.loadPropertiesFromFile(NEO4J_PATH + "conf/adbis.conf").newGraphDatabase();
+		Config.loadConfig();
+
+		graphDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(Config.DB_PATH)
+				.loadPropertiesFromFile(Config.DATABASE_CONFIG_PATH).newGraphDatabase();
 		registerShutdownHook(graphDb);
 
-		runQueries(QUERIES_PATH);
+		if (Config.RUN_PATH_QUERIES)
+			Config.RESULTS_PATH += "path_";
+		else
+			Config.RESULTS_PATH += "trav_";
+
+		if (!Config.TIME_INDEX_ENABLED)
+			Config.RESULTS_PATH += "noI_";
+
+		Config.RESULTS_PATH += "results";
+
+		runQueries(Config.QUERIES_PATH);
 		shutdown();
 	}
 
 	private static void runQueries(String queriesPath) throws NumberFormatException, IOException {
 
 		BufferedReader br = new BufferedReader(new FileReader(queriesPath));
-		FileWriter writer = new FileWriter(queriesPath + "_result");
 		String line = null, resultPath = null;
 		String[] token = null, interval = null;
 		Node src = null, trg = null;
@@ -55,18 +58,18 @@ public class Queries {
 		int c = 0;
 
 		System.out.println("Queries started");
-		writer.write("Result\tTime\n");
-
 		GraphDbTraversal algo = null;
 
-		if (traversalType == 1)
+		if (Config.TRAVERSAL_TYPE == 1)
 			algo = new SinglePointsTraversal(graphDb);
-		else if (traversalType == 2)
+		else if (Config.TRAVERSAL_TYPE == 2)
 			algo = new MultiTraversal(graphDb);
-		else if (traversalType == 3)
+		else if (Config.TRAVERSAL_TYPE == 3)
 			algo = new SingleIntervalTraversal(graphDb);
 
 		try (Transaction tx = graphDb.beginTx()) {
+
+			FileWriter writer = new FileWriter(Config.RESULTS_PATH + "_" + Config.TRAVERSAL_TYPE, true);
 
 			while ((line = br.readLine()) != null) {
 
@@ -79,8 +82,8 @@ public class Queries {
 
 				if (type < 7) {
 					intervals = token[3].split(";");
-					src = graphDb.findNode(nodeLabel, "id", token[1]);
-					trg = graphDb.findNode(nodeLabel, "id", token[2]);
+					src = graphDb.findNode(Config.NODE_LABEL, "id", token[1]);
+					trg = graphDb.findNode(Config.NODE_LABEL, "id", token[2]);
 				} else
 					intervals = token[1].split(";");
 
@@ -96,37 +99,40 @@ public class Queries {
 					}
 				}
 
-				if (type == 1)
-					result = algo.conjunctiveReachability(src, trg, times);
-				else if (type == 2)
-					result = algo.disjunctiveReachability(src, trg, times);
-				else if (type == 3)
-					result = algo.atLeastReachability(src, trg, times, Integer.parseInt(token[4]));
-				else if (type == 4)
-					resultPath = algo.conjunctivePath(src, trg, times);
-				else if (type == 5)
-					resultPath = algo.disjunctivePath(src, trg, times);
-				else if (type == 6)
-					resultPath = algo.atLeastPath(src, trg, times, Integer.parseInt(token[4]));
-				else if (type == 7)
-					resultPath = algo.conjunctiveReachability(times);
-				else if (type == 8)
-					resultPath = algo.disjunctiveReachability(times);
-				else if (type == 9)
-					resultPath = algo.atLeastReachability(times, Integer.parseInt(token[2]));
+				if (Config.RUN_PATH_QUERIES)
+					type += 3;
+
+				try {
+
+					if (type == 1)
+						result = algo.conjunctiveReachability(src, trg, times);
+					else if (type == 2)
+						result = algo.disjunctiveReachability(src, trg, times);
+					else if (type == 3)
+						result = algo.atLeastReachability(src, trg, times, Integer.parseInt(token[4]));
+					else if (type == 4)
+						resultPath = algo.conjunctivePath(src, trg, times);
+					else if (type == 5)
+						resultPath = algo.disjunctivePath(src, trg, times);
+					else if (type == 6)
+						resultPath = algo.atLeastPath(src, trg, times, Integer.parseInt(token[4]));
+				} catch (Exception e) {
+					writer.write("error\n");
+				}
 
 				if (type < 4)
-					writer.write(result + "\t" + (System.currentTimeMillis() - tStart) + "\n");
+					writer.write(type + "\t" + times.size() + "\t" + result + "\t"
+							+ (System.currentTimeMillis() - tStart) + "\n");
 				else
-					writer.write(resultPath + "\t" + (System.currentTimeMillis() - tStart) + "\n");
+					writer.write(type + "\t" + times.size() + "\t" + resultPath + "\t"
+							+ (System.currentTimeMillis() - tStart) + "\n");
 
 				writer.flush();
 			}
 			br.close();
-
+			writer.close();
 			tx.success();
 		}
-		writer.close();
 	}
 
 	private static void shutdown() {

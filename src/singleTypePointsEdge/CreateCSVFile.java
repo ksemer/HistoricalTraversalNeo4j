@@ -12,9 +12,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * CreateCSV file for neo4j using single point
+ * 
+ * @author ksemer
+ *
+ */
 public class CreateCSVFile {
 
-	private static final String DATASET_PATH = "data/dblp_merge";
+	private static final String DATASET_PATH = "data/graph1";
 	private static final String authors_csv = "/experiments/neo4j-community-3.1.1/import/nodes.csv";
 	private static final String published_csv = "/experiments/neo4j-community-3.1.1/import/connected.csv";
 	private static Map<Integer, String> nodesNames;
@@ -24,6 +30,11 @@ public class CreateCSVFile {
 		loadDataset();
 	}
 
+	/**
+	 * Load dataset
+	 * 
+	 * @throws IOException
+	 */
 	private static void loadDataset() throws IOException {
 
 		BufferedReader br = new BufferedReader(new FileReader(DATASET_PATH));
@@ -37,8 +48,8 @@ public class CreateCSVFile {
 		while ((line = br.readLine()) != null) {
 			edge = line.split("\t");
 
-			n1_t = findCreateAuthor(Integer.parseInt(edge[0]));
-			n2_t = findCreateAuthor(Integer.parseInt(edge[1]));
+			n1_t = findCreateNode(Integer.parseInt(edge[0]));
+			n2_t = findCreateNode(Integer.parseInt(edge[1]));
 
 			// edge[2] has the year/time
 			time = edge[2].split(" ");
@@ -59,6 +70,11 @@ public class CreateCSVFile {
 		System.out.println("Loadtime of all: " + (System.currentTimeMillis() - executionTime) + " (ms)");
 	}
 
+	/**
+	 * Create nodes and their adjacencies
+	 * 
+	 * @throws IOException
+	 */
 	private static void createNodesAndAdjacencies() throws IOException {
 		BufferedReader br = new BufferedReader(new FileReader(DATASET_PATH));
 		FileWriter w = new FileWriter(published_csv);
@@ -129,7 +145,14 @@ public class CreateCSVFile {
 		acs.close();
 	}
 
-	private static Set<Integer> findCreateAuthor(int id) throws IOException {
+	/**
+	 * Find or Create node if does not exist
+	 * 
+	 * @param id
+	 * @return
+	 * @throws IOException
+	 */
+	private static Set<Integer> findCreateNode(int id) throws IOException {
 		Set<Integer> n;
 
 		if ((n = nodes.get(id)) == null) {
@@ -140,6 +163,11 @@ public class CreateCSVFile {
 		return n;
 	}
 
+	/**
+	 * Load dblp author names
+	 * 
+	 * @throws IOException
+	 */
 	private static void loadNames() throws IOException {
 		System.out.println("Loading authors names in memory...");
 

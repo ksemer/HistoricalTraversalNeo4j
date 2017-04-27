@@ -103,9 +103,9 @@ public class SingleIntervalTraversal extends GraphDbTraversal {
 				}
 			}
 		}
-		
+
 		lifespan.and(I);
-		
+
 		return lifespan;
 	}
 

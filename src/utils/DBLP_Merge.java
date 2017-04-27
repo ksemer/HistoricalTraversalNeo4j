@@ -1,3 +1,5 @@
+package utils;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -11,6 +13,12 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+/**
+ * Create a dblp graph with invtervals u \t v \t year_start,year_end
+ * year_start,year_end
+ * 
+ * @author ksemer
+ */
 public class DBLP_Merge {
 	private static String data = "data/dblp";
 	private static String output = "data/dblp_merge";
@@ -18,7 +26,7 @@ public class DBLP_Merge {
 	public static void main(String[] args) throws IOException {
 		BufferedReader br = new BufferedReader(new FileReader(data));
 		FileWriter w = new FileWriter(output);
-		
+
 		String line = null;
 		Map<Integer, Map<Integer, Set<Integer>>> g = new HashMap<>();
 		Map<Integer, Set<Integer>> map;

@@ -24,7 +24,7 @@ import org.neo4j.graphdb.traversal.Evaluator;
 import org.neo4j.graphdb.traversal.Paths;
 import org.neo4j.graphdb.traversal.Uniqueness;
 
-import system.Queries;
+import system.Config;
 import system.GraphDbTraversal;
 
 /**
@@ -141,7 +141,7 @@ public class MultiTraversal extends GraphDbTraversal {
 					}).traverse(src)) {
 
 				if (p.endNode().equals(trg)) {
-					if (Queries.simplePath)
+					if (Config.SIMPLE_PATH)
 						path += Paths.simplePathToString(p);
 					else
 						path += Paths.pathToString(p, pathPrinter);
@@ -158,7 +158,7 @@ public class MultiTraversal extends GraphDbTraversal {
 
 		String path = "";
 		List<Integer> times_ = new ArrayList<>(times);
-		
+
 		for (Path p : graphdb.traversalDescription().breadthFirst()
 				.relationships(relationships.get(times_.get(0)), Direction.BOTH)
 				.uniqueness(Uniqueness.RELATIONSHIP_GLOBAL).evaluator(new Evaluator() {
@@ -205,7 +205,7 @@ public class MultiTraversal extends GraphDbTraversal {
 				}).traverse(src)) {
 
 			if (p.endNode().equals(trg)) {
-				if (Queries.simplePath)
+				if (Config.SIMPLE_PATH)
 					path += Paths.simplePathToString(p);
 				else
 					path += Paths.pathToString(p, pathPrinter);

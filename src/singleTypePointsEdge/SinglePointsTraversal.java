@@ -1,7 +1,6 @@
 package singleTypePointsEdge;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Iterator;
 import java.util.List;
@@ -62,15 +61,35 @@ public class SinglePointsTraversal extends GraphDbTraversal {
 	@Override
 	protected BitSet getLifespan(Relationship rel, BitSet I) {
 		BitSet lifespan = new BitSet();
-		int time_instance;
 		int[] timeInstances = (int[]) rel.getProperty("time_instances");
+		int time_instance = -1, m = timeInstances.length, i = 0;
 
-		for (Iterator<Integer> it = I.stream().iterator(); it.hasNext();) {
+		Iterator<Integer> it = I.stream().iterator();
+
+		if (it.hasNext())
 			time_instance = it.next();
 
-			if (Arrays.binarySearch(timeInstances, time_instance) >= 0)
+		while (i < m) {
+
+			if (timeInstances[i] < time_instance)
+				i++;
+			else if (time_instance < timeInstances[i]) {
+				if (it.hasNext())
+					time_instance = it.next();
+				else
+					break;
+			} else {
 				lifespan.set(time_instance);
+
+				if (it.hasNext())
+					time_instance = it.next();
+				else
+					break;
+
+				i++;
+			}
 		}
+
 		return lifespan;
 	}
 

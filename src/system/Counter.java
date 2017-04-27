@@ -2,6 +2,7 @@ package system;
 
 /**
  * Counter class
+ * 
  * @author ksemer
  */
 public class Counter {
@@ -13,39 +14,42 @@ public class Counter {
 	public Counter() {
 		counter = 1;
 	}
-	
+
 	/**
 	 * Increase counter
 	 */
 	public void increase() {
 		counter++;
 	}
-	
+
 	/**
 	 * Add c to counter
+	 * 
 	 * @param c
 	 */
 	public void increase(int c) {
-		counter+=c;
+		counter += c;
 	}
-	
+
 	/**
 	 * Decrease counter
 	 */
 	public void decrease() {
 		counter--;
 	}
-	
+
 	/**
 	 * Set the counter to val
+	 * 
 	 * @param val
 	 */
 	public void set(int val) {
 		counter = val;
 	}
-	
+
 	/**
 	 * Return counter
+	 * 
 	 * @return
 	 */
 	public int getValue() {
