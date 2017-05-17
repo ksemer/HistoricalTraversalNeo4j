@@ -269,7 +269,7 @@ public class MultiTraversal extends GraphDbTraversal {
 					p_.add(w);
 					toBeTraversed.add(p_);
 					intervalToBeChecked.add(eI);
-				} else if (!refine(life, eI)) {
+				} else if (!refine(life, eI).isEmpty()) {
 					p_ = new LinkedList<Node>(p);
 					p_.add(w);
 					toBeTraversed.add(p_);

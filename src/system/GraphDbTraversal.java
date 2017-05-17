@@ -236,7 +236,7 @@ public abstract class GraphDbTraversal {
 
 					toBeTraversed.add(w);
 					intervalToBeChecked.add(eI);
-				} else if (!refine(life, eI)) {
+				} else if (!refine(life, eI).isEmpty()) {
 					toBeTraversed.add(w);
 					intervalToBeChecked.add(eI);
 				}
@@ -304,7 +304,7 @@ public abstract class GraphDbTraversal {
 
 					toBeTraversed.add(w);
 					intervalToBeChecked.add(eI);
-				} else if (!refine(life, eI)) {
+				} else if (!refine(life, eI).isEmpty()) {
 					toBeTraversed.add(w);
 					intervalToBeChecked.add(eI);
 				}
@@ -373,7 +373,7 @@ public abstract class GraphDbTraversal {
 
 					toBeTraversed.add(w);
 					intervalToBeChecked.add(eI);
-				} else if (!refine(life, eI)) {
+				} else if (!refine(life, eI).isEmpty()) {
 					toBeTraversed.add(w);
 					intervalToBeChecked.add(eI);
 				}
@@ -442,7 +442,7 @@ public abstract class GraphDbTraversal {
 					p_.add(w);
 					toBeTraversed.add(p_);
 					intervalToBeChecked.add(eI);
-				} else if (!refine(life, eI)) {
+				} else if (!refine(life, eI).isEmpty()) {
 					p_ = new LinkedList<Node>(p);
 					p_.add(w);
 					toBeTraversed.add(p_);
@@ -573,7 +573,7 @@ public abstract class GraphDbTraversal {
 					p_.add(w);
 					toBeTraversed.add(p_);
 					intervalToBeChecked.add(eI);
-				} else if (!refine(life, eI)) {
+				} else if (!refine(life, eI).isEmpty()) {
 					p_ = new LinkedList<Node>(p);
 					p_.add(w);
 					toBeTraversed.add(p_);
@@ -610,15 +610,17 @@ public abstract class GraphDbTraversal {
 	 * @param I
 	 * @return
 	 */
-	protected boolean refine(BitSet INb, BitSet I) {
+	protected BitSet refine(BitSet INb, BitSet I) {
+
 		for (Iterator<Integer> it = I.stream().iterator(); it.hasNext();) {
 			int t = it.next();
 
 			if (!INb.get(t)) {
-				INb.or(I);
-				return false;
+				INb.set(t);
+				it.remove();
 			}
 		}
-		return true;
+
+		return I;
 	}
 }
